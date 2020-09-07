@@ -1,0 +1,177 @@
+/***
+Sample Node js Backend for Simple Json Plugin
+***/
+
+//Import express,bodyparser,https,loadash
+var express = require('express');
+var bodyParser = require('body-parser');
+var _ = require('lodash');
+const https = require('https');
+const http= require('http');
+var app = express();
+
+app.use(bodyParser.json());
+
+var opmanagerdata = require('./sample');
+
+
+var annotation = {
+  name : "annotation name",
+  enabled: true,
+  datasource: "Rest datasource",
+  showLine: true,
+}
+
+var annotations = [
+  { annotation: annotation, "title": "Alarms one Test", "time": 1450754160000, text: "test", tags: "testtag" }
+];
+
+var tagKeys = [
+  {"type":"string","text":"Severity"}
+];
+
+var severityTagValues = [
+  {'text': 'Critical'},
+  {'text': 'Trouble'}
+];
+
+var now = Date.now();
+var decreaser = 0;
+
+
+  
+//Setting CORS : Replace with origin needed
+function setCORSHeaders(res) {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST");
+  res.setHeader("Access-Control-Allow-Headers", "accept, content-type");  
+}
+
+//Methods needed for SimpleJson Grafana Plugin
+
+app.all('/', function(req, res) {
+  setCORSHeaders(res);
+  res.send('Noc Alarms One Plugin');
+  res.end();
+});
+
+app.all('/search', function(req, res){
+  setCORSHeaders(res);
+  var result = ["Severity","Displayname","message","DeviceName","category"];
+  res.json(result);
+  res.end();
+});
+
+app.all('/annotations', function(req, res) {
+  setCORSHeaders(res);
+  console.log(req.url);
+  console.log(req.body);
+
+  res.json(annotations);
+  res.end();
+});
+
+//method for counting the values
+const countOccurrences = (arr, val) => arr.reduce((a, v) => (v === val ? a + 1 : a), 0);
+
+//Method to get count table
+function getSeveriyCount(opRowData){
+	var severityList=[];
+	var countjson=[];
+	for(i=0;i< opRowData.length;i++){
+		var sevStr=opRowData[i].severityString;
+		severityList.push(sevStr.toLowerCase());
+	}
+	console.log(severityList.length);
+	
+    //  occurrence of critical
+    var criticalcount = countOccurrences(severityList,'critical'); 
+    //  occurrence of trouble
+    var troublecount =  countOccurrences(severityList,'trouble');
+	//  occurence of medium
+	var mediumcount = countOccurrences(severityList,'medium');
+	countjson=[[criticalcount,troublecount,mediumcount]];
+	
+    console.log("Crictical count::"+criticalcount);
+	console.log("Trouble count::"+troublecount);
+	return countjson;
+}
+
+function fetchAlarmsOnepromise(){
+	return new Promise((resolve, reject) => {
+		 https.get('https://webhook.site/3a343795-5203-44a6-992d-2f26e48d6ac7', (response) => {
+		 //http.get('http://url', (response) => {
+			let opsData = '';
+
+			response.on('data', (fragments) => {
+				//opsData += fragments;
+			});
+
+			response.on('end', () => {
+				let response_body =opmanagerdata;
+				resolve(response_body);
+				//let response_body = opsData;
+			    console.log("Call completed");
+			});
+
+			response.on('error', (error) => {
+				reject(error);
+			});
+		});
+	});
+}
+//Main method for getting the data - supports timeseries and Table
+app.all('/query', async(req, res) => {
+  var countResp=[]
+  setCORSHeaders(res);
+  //console.log(req.url);
+  //console.log(req.body);
+  var opsdata = await fetchAlarmsOnepromise();
+  console.log(opsdata);
+  countResp=getSeveriyCount(opsdata);
+  var table =
+  {
+    columns: [{text: 'Critical', type: 'number'}, {text: 'Trouble', type: 'number'},{text: 'Medium', type: 'number'}],
+    rows: countResp
+  };
+  
+  var tsResult = [];
+  _.each(req.body.targets, function(target) {
+    if (target.type === 'table') {
+      tsResult.push(table);
+    }
+	else{
+		console.log("Error - no time series data");
+	}
+  });
+ 
+  res.json(tsResult);
+  res.end();
+});
+
+
+app.all('/tag[\-]keys', function(req, res) {
+  setCORSHeaders(res);
+  console.log(req.url);
+  console.log(req.body);
+
+  res.json(tagKeys);
+  res.end();
+});
+
+app.all('/tag[\-]values', function(req, res) {
+  setCORSHeaders(res);
+  console.log(req.url);
+  console.log(req.body);
+
+  if (req.body.key == 'Severity') {
+    res.json(severityTagValues);
+  } else {
+    res.json(severityTagValues);
+  }
+  res.end();
+});
+
+app.listen(3334);
+
+console.log("Server is listening to port 3334");
