@@ -99,14 +99,14 @@ function fetchAlarmsOnepromise(){
 		 https.get('https://webhook.site/3a343795-5203-44a6-992d-2f26e48d6ac7', (response) => {
 		 //http.get('http://url, (response) => {
 			let opsData = '';
-
+                         //set NODE_TLS_REJECT_UNAUTHORIZED=0; to handle the certificate issue
 			response.on('data', (fragments) => {
 				//opsData += fragments;
 			});
 
 			response.on('end', () => {
 				let response_body =opmanagerdata;
-				resolve(response_body);
+				resolve(JSON.parse(response_body));
 				//let response_body = opsData;
 			    console.log("Call completed");
 			});
